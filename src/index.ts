@@ -463,6 +463,107 @@ app.get("/api/search", async (req, res) => {
   }
 });
 
+// Missing alumni endpoint (always restricted to CAREERBREAK/DECEASED)
+app.get("/api/missing_alumni", async (req, res) => {
+  const yearOfEntry =
+    typeof req.query.yearOfEntry === "string"
+      ? req.query.yearOfEntry.trim()
+      : "";
+  const programName =
+    typeof req.query.programName === "string"
+      ? req.query.programName.trim()
+      : "";
+  const specialization =
+    typeof req.query.specialization === "string"
+      ? req.query.specialization.trim()
+      : "";
+
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(
+    50,
+    Math.max(1, parseInt(req.query.limit as string) || 20),
+  );
+
+  const hasOptionalFilter =
+    Boolean(yearOfEntry) || Boolean(programName) || Boolean(specialization);
+
+  if (!hasOptionalFilter) {
+    res.json({
+      count: 0,
+      data: [],
+      page,
+      limit,
+      totalCount: 0,
+      hasMore: false,
+    });
+    return;
+  }
+
+  try {
+    const andConditions: any[] = [
+      { natureOfJob: { $in: ["CAREERBREAK", "DECEASED"] } },
+    ];
+
+    if (yearOfEntry) {
+      const parsedYearOfEntry = parseInt(yearOfEntry);
+      if (!isNaN(parsedYearOfEntry)) {
+        andConditions.push({ yearOfEntry: parsedYearOfEntry });
+      }
+    }
+
+    if (programName) {
+      andConditions.push({
+        programName: buildCaseInsensitiveExactRegex(programName),
+      });
+    }
+
+    if (specialization) {
+      andConditions.push({
+        specialization: buildCaseInsensitiveExactRegex(specialization),
+      });
+    }
+
+    const query = { $and: andConditions };
+    const skip = (page - 1) * limit;
+
+    const projection: any = {
+      serialNo: 1,
+      name: 1,
+      linkedIn: 1,
+      rollNumber: 1,
+      department: 1,
+      yearOfEntry: 1,
+      programName: 1,
+      specialization: 1,
+      lastOrganization: 1,
+      currentLocationIndia: 1,
+      currentOverseasLocation: 1,
+      natureOfJob: 1,
+    };
+
+    const results = await Alumni.find(query)
+      .select(projection)
+      .sort({ yearOfEntry: 1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalCount = await Alumni.countDocuments(query);
+    const hasMore = skip + results.length < totalCount;
+
+    res.json({
+      count: results.length,
+      data: results,
+      page,
+      limit,
+      totalCount,
+      hasMore,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // Submit update request endpoint
 app.post("/api/update-request", async (req, res) => {
   try {
