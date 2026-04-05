@@ -770,8 +770,12 @@ app.post(
         return;
       }
 
-      // Apply the updates
-      Object.assign(alumni, updateRequest.newData);
+      // Apply the updates safely by excluding immutable and internal fields
+      const safeData = { ...updateRequest.newData };
+      delete safeData._id;
+      delete safeData.__v;
+      
+      alumni.set(safeData);
       await alumni.save();
 
       // Update the request status
@@ -786,8 +790,11 @@ app.post(
         alumni,
       });
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Server error" });
+      console.error("Error approving request:", err);
+      res.status(500).json({ 
+        error: "Server error", 
+        details: err instanceof Error ? err.message : String(err) 
+      });
     }
   },
 );
